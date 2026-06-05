@@ -125,7 +125,8 @@ model Ingredient {
   branchId  String
   inventory Inventory[]
   wasteRecords WasteRecord[]
-  predictions InventoryPrediction[]
+  inventoryPredictions InventoryPrediction[]
+  wastePredictions WastePrediction[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
