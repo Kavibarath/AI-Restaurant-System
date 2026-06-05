@@ -1,0 +1,204 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============= SHARED MODELS =============
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      String   @default("staff") // admin, manager, staff
+  branch    Branch   @relation(fields: [branchId], references: [id])
+  branchId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([email])
+  @@index([branchId])
+}
+
+model Branch {
+  id        String   @id @default(cuid())
+  name      String
+  location  String
+  users     User[]
+  menuItems MenuItem[]
+  orders    Order[]
+  inventory Inventory[]
+  ingredients Ingredient[]
+  suppliers Supplier[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ============= MEMBER A: SALES MODULE =============
+model MenuItem {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  price       Float
+  category    String
+  branch      Branch   @relation(fields: [branchId], references: [id])
+  branchId    String
+  orderItems  OrderItem[]
+  recommendations Recommendation[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([branchId])
+}
+
+model Customer {
+  id      String @id @default(cuid())
+  email   String @unique
+  name    String
+  phone   String?
+  orders  Order[]
+  createdAt DateTime @default(now())
+}
+
+model Order {
+  id        String   @id @default(cuid())
+  customer  Customer @relation(fields: [customerId], references: [id])
+  customerId String
+  branch    Branch   @relation(fields: [branchId], references: [id])
+  branchId  String
+  orderItems OrderItem[]
+  totalAmount Float
+  status    String   @default("pending") // pending, completed, cancelled
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([branchId])
+}
+
+model OrderItem {
+  id       String @id @default(cuid())
+  order    Order  @relation(fields: [orderId], references: [id])
+  orderId  String
+  menuItem MenuItem @relation(fields: [menuItemId], references: [id])
+  menuItemId String
+  quantity Int
+  price    Float
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+  @@index([menuItemId])
+}
+
+model DemandPrediction {
+  id        String   @id @default(cuid())
+  date      DateTime
+  predictedOrders Int
+  predictedSales Float
+  actualOrders Int?
+  actualSales Float?
+  accuracy Float?
+  createdAt DateTime @default(now())
+}
+
+model Recommendation {
+  id        String   @id @default(cuid())
+  menuItem  MenuItem @relation(fields: [menuItemId], references: [id])
+  menuItemId String
+  recommendedItem String
+  frequency Int
+  confidence Float
+  createdAt DateTime @default(now())
+
+  @@index([menuItemId])
+}
+
+// ============= MEMBER B: INVENTORY MODULE =============
+model Ingredient {
+  id        String   @id @default(cuid())
+  name      String
+  unit      String   // kg, liter, pieces, etc
+  branch    Branch   @relation(fields: [branchId], references: [id])
+  branchId  String
+  inventory Inventory[]
+  wasteRecords WasteRecord[]
+  predictions InventoryPrediction[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([branchId])
+}
+
+model Inventory {
+  id          String   @id @default(cuid())
+  ingredient  Ingredient @relation(fields: [ingredientId], references: [id])
+  ingredientId String
+  branch      Branch   @relation(fields: [branchId], references: [id])
+  branchId    String
+  quantity    Float
+  minStock    Float
+  maxStock    Float
+  expiryDate  DateTime?
+  supplier    Supplier @relation(fields: [supplierId], references: [id])
+  supplierId  String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([ingredientId])
+  @@index([branchId])
+  @@index([supplierId])
+}
+
+model Supplier {
+  id        String   @id @default(cuid())
+  name      String
+  contact   String
+  email     String
+  phone     String
+  branch    Branch   @relation(fields: [branchId], references: [id])
+  branchId  String
+  inventory Inventory[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([branchId])
+}
+
+model WasteRecord {
+  id          String   @id @default(cuid())
+  ingredient  Ingredient @relation(fields: [ingredientId], references: [id])
+  ingredientId String
+  quantity    Float
+  reason      String
+  date        DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([ingredientId])
+}
+
+model InventoryPrediction {
+  id          String   @id @default(cuid())
+  ingredient  Ingredient @relation(fields: [ingredientId], references: [id])
+  ingredientId String
+  predictedQuantity Float
+  predictedDate DateTime
+  accuracy    Float?
+  createdAt   DateTime @default(now())
+
+  @@index([ingredientId])
+}
+
+model WastePrediction {
+  id          String   @id @default(cuid())
+  ingredient  Ingredient @relation(fields: [ingredientId], references: [id])
+  ingredientId String
+  riskLevel   String   // low, medium, high
+  confidence  Float
+  predictedDate DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([ingredientId])
+}
