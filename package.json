@@ -1,0 +1,18 @@
+{
+  "name": "ai-restaurant-system",
+  "version": "1.0.0",
+  "description": "AI-Powered Smart Restaurant Management System",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\" \"npm run dev:ai\"",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:ai": "cd ai-service && python -m uvicorn main:app --reload --port 8000"
+  },
+  "keywords": ["restaurant", "ai", "inventory", "sales", "forecasting"],
+  "author": "Kavibarath, Aruniya-Nadeshan",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.0"
+  }
+}
