@@ -1,7 +1,15 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+
+// Auth routes (shared)
 import authRoutes from './routes/authRoutes';
+
+// Member B: Inventory Module routes
+import ingredientRoutes from './routes/ingredientRoutes';
+import inventoryRoutes from './routes/inventoryRoutes';
+import supplierRoutes from './routes/supplierRoutes';
+import wasteRoutes from './routes/wasteRoutes';
 
 dotenv.config();
 
@@ -12,8 +20,14 @@ const PORT = process.env.PORT || 5000;
 app.use(express.json());
 app.use(cors());
 
-// Routes
+// ============= SHARED ROUTES =============
 app.use('/api/auth', authRoutes);
+
+// ============= MEMBER B: INVENTORY MODULE =============
+app.use('/api/ingredients', ingredientRoutes);
+app.use('/api/inventory', inventoryRoutes);
+app.use('/api/suppliers', supplierRoutes);
+app.use('/api/waste', wasteRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
@@ -27,8 +41,12 @@ app.get('/', (req, res) => {
     version: '1.0.0',
     endpoints: {
       auth: '/api/auth/register, /api/auth/login, /api/auth/me',
-      health: '/health'
-    }
+      ingredients: '/api/ingredients',
+      inventory: '/api/inventory',
+      suppliers: '/api/suppliers',
+      waste: '/api/waste',
+      health: '/health',
+    },
   });
 });
 
@@ -40,4 +58,5 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
+  console.log(`📦 Inventory APIs ready at /api/ingredients, /api/inventory, /api/suppliers, /api/waste`);
 });
