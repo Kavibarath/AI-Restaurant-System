@@ -1,16 +1,13 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import prisma from '../lib/prisma';
 
 // @desc    Get all menu items for a specific branch
 // @route   GET /api/menu?branchId=xxxx
 export const getMenuItems = async (req: Request, res: Response): Promise<void> => {
   try {
     const { branchId } = req.query;
-
     if (!branchId) {
-      res.status(400).json({ error: 'branchId query parameter is required' });
+      res.status(400).json({ success: false, error: 'branchId query parameter is required' });
       return;
     }
 
@@ -19,9 +16,10 @@ export const getMenuItems = async (req: Request, res: Response): Promise<void> =
       orderBy: { createdAt: 'desc' },
     });
 
-    res.status(200).json(items);
+    res.status(200).json({ success: true, count: items.length, data: items });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to retrieve menu items' });
+    console.error('Get Menu Items Error:', error);
+    res.status(500).json({ success: false, error: 'Failed to retrieve menu items' });
   }
 };
 
@@ -30,19 +28,17 @@ export const getMenuItems = async (req: Request, res: Response): Promise<void> =
 export const getMenuItemById = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-
-    const item = await prisma.menuItem.findUnique({
-      where: { id },
-    });
+    const item = await prisma.menuItem.findUnique({ where: { id } });
 
     if (!item) {
-      res.status(404).json({ error: 'Menu item not found' });
+      res.status(404).json({ success: false, error: 'Menu item not found' });
       return;
     }
 
-    res.status(200).json(item);
+    res.status(200).json({ success: true, data: item });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to retrieve menu item' });
+    console.error('Get Menu Item By ID Error:', error);
+    res.status(500).json({ success: false, error: 'Failed to retrieve menu item' });
   }
 };
 
@@ -51,9 +47,8 @@ export const getMenuItemById = async (req: Request, res: Response): Promise<void
 export const createMenuItem = async (req: Request, res: Response): Promise<void> => {
   try {
     const { name, description, price, category, branchId } = req.body;
-
     if (!name || !price || !category || !branchId) {
-      res.status(400).json({ error: 'Missing required fields: name, price, category, and branchId are mandatory' });
+      res.status(400).json({ success: false, error: 'Missing required fields: name, price, category, and branchId are mandatory' });
       return;
     }
 
@@ -67,9 +62,10 @@ export const createMenuItem = async (req: Request, res: Response): Promise<void>
       },
     });
 
-    res.status(201).json(newItem);
+    res.status(201).json({ success: true, data: newItem });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to create menu item' });
+    console.error('Create Menu Item Error:', error);
+    res.status(500).json({ success: false, error: 'Failed to create menu item' });
   }
 };
 
@@ -79,6 +75,12 @@ export const updateMenuItem = async (req: Request, res: Response): Promise<void>
   try {
     const { id } = req.params;
     const { name, description, price, category } = req.body;
+
+    const existing = await prisma.menuItem.findUnique({ where: { id } });
+    if (!existing) {
+      res.status(404).json({ success: false, error: 'Menu item not found' });
+      return;
+    }
 
     const updatedItem = await prisma.menuItem.update({
       where: { id },
@@ -90,9 +92,10 @@ export const updateMenuItem = async (req: Request, res: Response): Promise<void>
       },
     });
 
-    res.status(200).json(updatedItem);
+    res.status(200).json({ success: true, data: updatedItem });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to update menu item' });
+    console.error('Update Menu Item Error:', error);
+    res.status(500).json({ success: false, error: 'Failed to update menu item' });
   }
 };
 
@@ -102,12 +105,16 @@ export const deleteMenuItem = async (req: Request, res: Response): Promise<void>
   try {
     const { id } = req.params;
 
-    await prisma.menuItem.delete({
-      where: { id },
-    });
+    const existing = await prisma.menuItem.findUnique({ where: { id } });
+    if (!existing) {
+      res.status(404).json({ success: false, error: 'Menu item not found' });
+      return;
+    }
 
-    res.status(200).json({ message: 'Menu item deleted successfully' });
+    await prisma.menuItem.delete({ where: { id } });
+    res.status(200).json({ success: true, message: 'Menu item deleted successfully' });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to delete menu item. Ensure it is not linked to existing orders.' });
+    console.error('Delete Menu Item Error:', error);
+    res.status(500).json({ success: false, error: 'Failed to delete menu item. Ensure it is not linked to existing orders.' });
   }
 };
