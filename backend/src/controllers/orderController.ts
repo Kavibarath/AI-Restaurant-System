@@ -1,29 +1,31 @@
 import { Request, Response } from 'express';
-import prisma from '../lib/prisma';
+import { PrismaClient } from '@prisma/client';
 
-// @desc    Create a new customer order with nested transaction items
+const prisma = new PrismaClient();
+
+// @desc    Create a new order with multiple items (Atomic Transaction)
 // @route   POST /api/orders
 export const createOrder = async (req: Request, res: Response): Promise<void> => {
   try {
     const { customerId, branchId, items } = req.body; 
-    // items schema format: [{ menuItemId: string, quantity: number, price: number }]
+    // items format: [{ menuItemId: string, quantity: number, price: number }]
 
     if (!customerId || !branchId || !items || items.length === 0) {
       res.status(400).json({ success: false, error: 'Missing customerId, branchId, or items array' });
       return;
     }
 
-    // Verify target customer profile is registered in DB
-    const customerExists = await prisma.customer.findUnique({ where: { id: customerId } });
-    if (!customerExists) {
-      res.status(404).json({ success: false, error: 'Target customer record not found' });
+    // Verify customer exists
+    const customer = await prisma.customer.findUnique({ where: { id: customerId } });
+    if (!customer) {
+      res.status(404).json({ success: false, error: 'Customer not found' });
       return;
     }
 
-    // Accumulate basket total cost
+    // Calculate total order cost
     const totalAmount = items.reduce((sum: number, item: any) => sum + (item.price * item.quantity), 0);
 
-    // Atomically execute parent Order and detailed OrderItems tables entries together
+    // Save order and item breakdowns together safely
     const newOrder = await prisma.$transaction(async (tx) => {
       const order = await tx.order.create({
         data: {
@@ -47,91 +49,94 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
 
     res.status(201).json({ success: true, data: newOrder });
   } catch (error) {
-    console.error('Create Order Transaction Failure:', error);
-    res.status(500).json({ success: false, error: 'Failed to process customer transaction order' });
+    console.error('Order Creation Error:', error);
+    res.status(500).json({ success: false, error: 'Internal server error processing order' });
   }
 };
 
-// @desc    Get group orders with active relational query filters
+// @desc    Get all orders with optional filters (branchId, status)
 // @route   GET /api/orders
 export const getOrders = async (req: Request, res: Response): Promise<void> => {
   try {
     const { branchId, status } = req.query;
-    const searchConditions: any = {};
+    const filterConditions: any = {};
 
-    if (branchId) searchConditions.branchId = String(branchId);
-    if (status) searchConditions.status = String(status);
+    if (branchId) filterConditions.branchId = String(branchId);
+    if (status) filterConditions.status = String(status);
 
     const orders = await prisma.order.findMany({
-      where: searchConditions,
+      where: filterConditions,
       include: {
         customer: true,
         orderItems: {
-          include: { menuItem: true }
-        }
+          include: { menuItem: true },
+        },
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
     });
 
     res.status(200).json({ success: true, count: orders.length, data: orders });
   } catch (error) {
-    console.error('Fetch Orders Failure:', error);
-    res.status(500).json({ success: false, error: 'Failed to retrieve system transactions list' });
+    console.error('Fetch Orders Error:', error);
+    res.status(500).json({ success: false, error: 'Internal server error fetching orders' });
   }
 };
 
-// @desc    Get order details by explicit primary key ID
+// @desc    Get single order details by ID
 // @route   GET /api/orders/:id
 export const getOrderById = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
+
     const order = await prisma.order.findUnique({
       where: { id },
       include: {
         customer: true,
-        orderItems: { include: { menuItem: true } }
-      }
+        orderItems: {
+          include: { menuItem: true },
+        },
+      },
     });
 
     if (!order) {
-      res.status(404).json({ success: false, error: 'Target transaction record missing' });
+      res.status(404).json({ success: false, error: 'Order transaction records not found' });
       return;
     }
 
     res.status(200).json({ success: true, data: order });
   } catch (error) {
-    console.error('Fetch Order By ID Failure:', error);
-    res.status(500).json({ success: false, error: 'Failed to extract single order metrics' });
+    console.error('Fetch Order ID Error:', error);
+    res.status(500).json({ success: false, error: 'Internal server error extracting order details' });
   }
 };
 
-// @desc    Modify order dispatch phase status tracking value
+// @desc    Update order status tracking lifecycle phase
 // @route   PUT /api/orders/:id/status
 export const updateOrderStatus = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const { status } = req.body;
 
-    const acceptedPhases = ['pending', 'completed', 'cancelled'];
-    if (!status || !acceptedPhases.includes(status)) {
-      res.status(400).json({ success: false, error: 'Status phase must evaluate to pending, completed, or cancelled' });
+    const validPhases = ['pending', 'completed', 'cancelled'];
+    if (!status || !validPhases.includes(status)) {
+      res.status(400).json({ success: false, error: 'Status phase must equal pending, completed, or cancelled' });
       return;
     }
 
-    const verificationCheck = await prisma.order.findUnique({ where: { id } });
-    if (!verificationCheck) {
-      res.status(404).json({ success: false, error: 'Target order record missing' });
+    const orderExists = await prisma.order.findUnique({ where: { id } });
+    if (!orderExists) {
+      res.status(404).json({ success: false, error: 'Order target file entry missing' });
       return;
     }
 
     const modifiedOrder = await prisma.order.update({
       where: { id },
-      data: { status }
+      data: { status },
     });
 
     res.status(200).json({ success: true, data: modifiedOrder });
   } catch (error) {
-    console.error('Update Phase Status Failure:', error);
-    res.status(500).json({ success: false, error: 'Failed to modify tracking status state' });
+    console.error('Update Status Error:', error);
+    res.status(500).json({ success: false, error: 'Internal server error updating status parameters' });
   }
 };
