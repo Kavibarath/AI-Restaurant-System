@@ -11,6 +11,9 @@ import inventoryRoutes from './routes/inventoryRoutes';
 import supplierRoutes from './routes/supplierRoutes';
 import wasteRoutes from './routes/wasteRoutes';
 
+// Member B: AI Prediction routes
+import predictionRoutes from './routes/predictionRoutes';
+
 dotenv.config();
 
 const app = express();
@@ -29,6 +32,9 @@ app.use('/api/inventory', inventoryRoutes);
 app.use('/api/suppliers', supplierRoutes);
 app.use('/api/waste', wasteRoutes);
 
+// ============= AI PREDICTIONS =============
+app.use('/api/predict', predictionRoutes);
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'Backend server running' });
@@ -45,6 +51,7 @@ app.get('/', (req, res) => {
       inventory: '/api/inventory',
       suppliers: '/api/suppliers',
       waste: '/api/waste',
+      predictions: '/api/predict/waste/all, /api/predict/waste/inventory/:id, /api/predict/inventory/ingredient/:id',
       health: '/health',
     },
   });
