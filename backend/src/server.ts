@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import authRoutes from './routes/authRoutes';
 import menuRoutes from './routes/menuRoutes';
+import orderRoutes from './routes/orderRoutes';
 
 dotenv.config();
 
@@ -13,6 +14,7 @@ const PORT = process.env.PORT || 5000;
 app.use(express.json());
 app.use(cors());
 app.use('/api/menu', menuRoutes);
+app.use('/api/orders', orderRoutes);
 
 // Routes
 app.use('/api/auth', authRoutes);
