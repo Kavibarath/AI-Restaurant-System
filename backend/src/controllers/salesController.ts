@@ -1,95 +1,67 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
+import { getDemandForecast, getMenuRecommendations } from '../utils/aiService';
 
 const prisma = new PrismaClient();
 
-// @desc    Get total revenue and order summary analytics
-// @route   GET /api/sales/summary?branchId=xxxx
-export const getSalesSummary = async (req: Request, res: Response): Promise<void> => {
+/**
+ * Fetches standard historical sales analytics for dashboards
+ */
+export const getSalesAnalytics = async (req: Request, res: Response) => {
   try {
     const { branchId } = req.query;
 
-    if (!branchId) {
-      res.status(400).json({ success: false, error: 'branchId query parameter is required' });
-      return;
-    }
-
-    // Aggregate completed orders for total revenue calculations
-    const salesAggregate = await prisma.order.aggregate({
+    const salesHistory = await prisma.order.findMany({
       where: {
-        branchId: String(branchId),
-        status: 'completed',
+        branchId: branchId as string,
+        status: 'completed', // Only calculate revenue on successful sales
       },
-      _sum: {
-        totalAmount: true,
-      },
-      _count: {
-        id: true,
-      },
+      orderBy: { createdAt: 'desc' },
+      take: 50, // Grab recent order trends
     });
 
-    res.status(200).json({
-      success: true,
-      data: {
-        totalRevenue: salesAggregate._sum.totalAmount || 0,
-        totalOrders: salesAggregate._count.id || 0,
-      },
-    });
-  } catch (error) {
-    console.error('Sales Summary Error:', error);
-    res.status(500).json({ success: false, error: 'Failed to retrieve sales summary data' });
+    return res.status(200).json({ success: true, data: salesHistory });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
   }
 };
 
-// @desc    Get top selling menu items with quantities
-// @route   GET /api/sales/top-items?branchId=xxxx
-export const getTopItems = async (req: Request, res: Response): Promise<void> => {
+/**
+ * Forwards requests to the Python microservice to get AI demand forecasting
+ */
+export const getSalesForecastDashboard = async (req: Request, res: Response) => {
   try {
-    const { branchId } = req.query;
+    const { branchId } = req.params;
 
     if (!branchId) {
-      res.status(400).json({ success: false, error: 'branchId query parameter is required' });
-      return;
+      return res.status(400).json({ error: 'Branch ID is required' });
     }
 
-    // Group order items by menuItemId to find popular dishes
-    const orderItemsGrouped = await prisma.orderItem.groupBy({
-      by: ['menuItemId'],
-      where: {
-        order: {
-          branchId: String(branchId),
-          status: 'completed',
-        },
-      },
-      _sum: {
-        quantity: true,
-      },
-      orderBy: {
-        _sum: {
-          quantity: 'desc',
-        },
-      },
-      take: 5, // Limit to top 5 items
-    });
+    // Fixed: Passing only branchId as required by your custom utility signature
+    const forecast = await getDemandForecast(branchId);
 
-    // Populate item metadata names and details for response payload
-    const completeTopItems = await Promise.all(
-      orderItemsGrouped.map(async (group) => {
-        const itemDetails = await prisma.menuItem.findUnique({
-          where: { id: group.menuItemId },
-        });
-        return {
-          id: group.menuItemId,
-          name: itemDetails?.name || 'Unknown Item',
-          category: itemDetails?.category || 'General',
-          totalSold: group._sum.quantity || 0,
-        };
-      })
-    );
+    return res.status(200).json({ success: true, data: forecast });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+};
 
-    res.status(200).json({ success: true, data: completeTopItems });
-  } catch (error) {
-    console.error('Top Items Analytics Error:', error);
-    res.status(500).json({ success: false, error: 'Failed to compute top items analytics' });
+/**
+ * Forwards requests to get AI menu item suggestions (cross-selling)
+ */
+export const getAIRecommendations = async (req: Request, res: Response) => {
+  try {
+    const { menuItemId } = req.params;
+
+    if (!menuItemId) {
+      return res.status(400).json({ error: 'Menu Item ID is required' });
+    }
+
+    // FIXED: Wrapped menuItemId inside an array [menuItemId] to match the expected string[] type signature
+    const recommendations = await getMenuRecommendations([menuItemId]);
+
+    return res.status(200).json({ success: true, data: recommendations });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
   }
 };

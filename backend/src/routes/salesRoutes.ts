@@ -1,12 +1,10 @@
 import { Router } from 'express';
-import { getSalesSummary, getTopItems } from '../controllers/salesController';
+import { getSalesAnalytics, getSalesForecastDashboard, getAIRecommendations } from '../controllers/salesController';
 
 const router = Router();
 
-// Dashboard Summary Counters
-router.get('/summary', getSalesSummary);
-
-// Dashboard Chart Breakdown Data
-router.get('/top-items', getTopItems);
+router.get('/analytics', getSalesAnalytics);
+router.get('/forecast/:branchId', getSalesForecastDashboard);
+router.get('/recommendations/:menuItemId', getAIRecommendations);
 
 export default router;
