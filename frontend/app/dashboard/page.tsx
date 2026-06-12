@@ -125,6 +125,12 @@ export default function DashboardPage() {
                 📦 Inventory
               </Link>
               <Link
+                href="/dashboard/ingredients"
+                className="block bg-green-50 hover:bg-green-100 p-3 rounded-lg text-green-700 font-medium"
+              >
+                🥕 Ingredients
+              </Link>
+              <Link
                 href="/dashboard/suppliers"
                 className="block bg-green-50 hover:bg-green-100 p-3 rounded-lg text-green-700 font-medium"
               >
