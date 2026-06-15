@@ -96,6 +96,11 @@ export const createIngredient = async (data: { name: string; unit: string; branc
   return res.data;
 };
 
+export const updateIngredient = async (id: string, data: { name?: string; unit?: string }) => {
+  const res = await authAxios.put(`/api/ingredients/${id}`, data);
+  return res.data;
+};
+
 export const deleteIngredient = async (id: string) => {
   const res = await authAxios.delete(`/api/ingredients/${id}`);
   return res.data;
@@ -118,6 +123,14 @@ export const createSupplier = async (data: {
     branchId: DEFAULT_BRANCH_ID,
     ...data,
   });
+  return res.data;
+};
+
+export const updateSupplier = async (
+  id: string,
+  data: { name?: string; contact?: string; email?: string; phone?: string }
+) => {
+  const res = await authAxios.put(`/api/suppliers/${id}`, data);
   return res.data;
 };
 
@@ -150,6 +163,20 @@ export const createInventory = async (data: {
   return res.data;
 };
 
+export const updateInventory = async (
+  id: string,
+  data: {
+    quantity?: number;
+    minStock?: number;
+    maxStock?: number;
+    expiryDate?: string | null;
+    supplierId?: string;
+  }
+) => {
+  const res = await authAxios.put(`/api/inventory/${id}`, data);
+  return res.data;
+};
+
 export const deleteInventory = async (id: string) => {
   const res = await authAxios.delete(`/api/inventory/${id}`);
   return res.data;
@@ -176,6 +203,19 @@ export const createWasteRecord = async (data: {
   date?: string;
 }) => {
   const res = await authAxios.post('/api/waste', data);
+  return res.data;
+};
+
+export const updateWasteRecord = async (
+  id: string,
+  data: { quantity?: number; reason?: string; date?: string }
+) => {
+  const res = await authAxios.put(`/api/waste/${id}`, data);
+  return res.data;
+};
+
+export const deleteWasteRecord = async (id: string) => {
+  const res = await authAxios.delete(`/api/waste/${id}`);
   return res.data;
 };
 

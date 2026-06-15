@@ -3,6 +3,7 @@ import {
   getAllWaste,
   getWasteById,
   createWaste,
+  updateWaste,
   deleteWaste,
   getWasteAnalytics,
 } from '../controllers/wasteController';
@@ -16,6 +17,7 @@ router.get('/', getAllWaste);
 router.get('/analytics', getWasteAnalytics);
 router.get('/:id', getWasteById);
 router.post('/', createWaste);
+router.put('/:id', updateWaste);
 router.delete('/:id', deleteWaste);
 
 export default router;

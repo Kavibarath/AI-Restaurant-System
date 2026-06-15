@@ -6,6 +6,7 @@ import PageShell, { StatCard, EmptyState } from '@/components/common/PageShell';
 import {
   getInventory,
   createInventory,
+  updateInventory,
   deleteInventory,
   getStockAlerts,
   getIngredients,
@@ -50,6 +51,15 @@ export default function InventoryPage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
+  const [editing, setEditing] = useState<InventoryItem | null>(null);
+  const [editForm, setEditForm] = useState({
+    quantity: '',
+    minStock: '',
+    maxStock: '',
+    expiryDate: '',
+    supplierId: '',
+  });
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const load = async () => {
     try {
@@ -96,6 +106,38 @@ export default function InventoryPage() {
       setError(e.response?.data?.error || 'Failed to add stock');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const openEdit = (item: InventoryItem) => {
+    setEditing(item);
+    setEditForm({
+      quantity: String(item.quantity),
+      minStock: String(item.minStock),
+      maxStock: String(item.maxStock),
+      expiryDate: item.expiryDate ? item.expiryDate.slice(0, 10) : '',
+      supplierId: item.supplierId,
+    });
+  };
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editing) return;
+    try {
+      setSavingEdit(true);
+      await updateInventory(editing.id, {
+        quantity: parseFloat(editForm.quantity),
+        minStock: parseFloat(editForm.minStock),
+        maxStock: parseFloat(editForm.maxStock),
+        expiryDate: editForm.expiryDate || null,
+        supplierId: editForm.supplierId,
+      });
+      setEditing(null);
+      await load();
+    } catch (e: any) {
+      setError(e.response?.data?.error || 'Failed to update stock');
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -310,7 +352,13 @@ export default function InventoryPage() {
                           {status.label}
                         </span>
                       </td>
-                      <td className="py-2.5 px-3 text-right">
+                      <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                        <button
+                          onClick={() => openEdit(item)}
+                          className="text-green-700 hover:text-green-900 text-xs font-medium mr-3"
+                        >
+                          Edit
+                        </button>
                         <button
                           onClick={() => handleDelete(item.id)}
                           className="text-red-600 hover:text-red-800 text-xs font-medium"
@@ -326,6 +374,102 @@ export default function InventoryPage() {
           </div>
         )}
       </div>
+
+      {/* Edit modal */}
+      {editing && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <h3 className="text-lg font-bold text-gray-800">Edit Stock</h3>
+                <p className="text-sm text-gray-500">
+                  {editing.ingredient?.name} ({editing.ingredient?.unit})
+                </p>
+              </div>
+              <button
+                onClick={() => setEditing(null)}
+                className="text-gray-400 hover:text-gray-600 text-xl leading-none"
+              >
+                ✕
+              </button>
+            </div>
+            <form onSubmit={handleUpdate} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Quantity</label>
+                <input
+                  className="input-field"
+                  type="number"
+                  step="any"
+                  required
+                  value={editForm.quantity}
+                  onChange={(e) => setEditForm({ ...editForm, quantity: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Supplier</label>
+                <select
+                  className="input-field"
+                  value={editForm.supplierId}
+                  onChange={(e) => setEditForm({ ...editForm, supplierId: e.target.value })}
+                >
+                  {suppliers.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Min Stock</label>
+                <input
+                  className="input-field"
+                  type="number"
+                  step="any"
+                  required
+                  value={editForm.minStock}
+                  onChange={(e) => setEditForm({ ...editForm, minStock: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Max Stock</label>
+                <input
+                  className="input-field"
+                  type="number"
+                  step="any"
+                  required
+                  value={editForm.maxStock}
+                  onChange={(e) => setEditForm({ ...editForm, maxStock: e.target.value })}
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-xs text-gray-500 mb-1">Expiry Date</label>
+                <input
+                  className="input-field"
+                  type="date"
+                  value={editForm.expiryDate}
+                  onChange={(e) => setEditForm({ ...editForm, expiryDate: e.target.value })}
+                />
+              </div>
+              <div className="sm:col-span-2 flex gap-3 justify-end mt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditing(null)}
+                  className="px-4 py-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 text-sm font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingEdit}
+                  className="btn-secondary text-sm disabled:opacity-50"
+                >
+                  {savingEdit ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </PageShell>
   );
 }

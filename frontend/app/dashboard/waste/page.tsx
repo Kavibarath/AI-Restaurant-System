@@ -6,6 +6,8 @@ import {
   predictAllWaste,
   getWasteRecords,
   createWasteRecord,
+  updateWasteRecord,
+  deleteWasteRecord,
   getIngredients,
   WastePrediction,
   WasteRecord,
@@ -30,6 +32,9 @@ export default function WastePage() {
   const [aiError, setAiError] = useState('');
   const [form, setForm] = useState({ ingredientId: '', quantity: '', reason: 'Expired' });
   const [submitting, setSubmitting] = useState(false);
+  const [editing, setEditing] = useState<WasteRecord | null>(null);
+  const [editForm, setEditForm] = useState({ quantity: '', reason: 'Expired', date: '' });
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const loadBase = async () => {
     try {
@@ -82,6 +87,44 @@ export default function WastePage() {
       setError(e.response?.data?.error || 'Failed to log waste');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const openEdit = (r: WasteRecord) => {
+    setEditing(r);
+    setEditForm({
+      quantity: String(r.quantity),
+      reason: r.reason,
+      date: r.date ? r.date.slice(0, 10) : '',
+    });
+  };
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editing) return;
+    try {
+      setSavingEdit(true);
+      await updateWasteRecord(editing.id, {
+        quantity: parseFloat(editForm.quantity),
+        reason: editForm.reason,
+        date: editForm.date || undefined,
+      });
+      setEditing(null);
+      await loadBase();
+    } catch (e: any) {
+      setError(e.response?.data?.error || 'Failed to update waste record');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Delete this waste record?')) return;
+    try {
+      await deleteWasteRecord(id);
+      setRecords((prev) => prev.filter((r) => r.id !== id));
+    } catch (e: any) {
+      setError(e.response?.data?.error || 'Failed to delete record');
     }
   };
 
@@ -235,6 +278,7 @@ export default function WastePage() {
                   <th className="py-2 px-3">Quantity</th>
                   <th className="py-2 px-3">Reason</th>
                   <th className="py-2 px-3">Date</th>
+                  <th className="py-2 px-3 text-right">Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -246,6 +290,20 @@ export default function WastePage() {
                     <td className="py-2.5 px-3 text-gray-600">
                       {new Date(r.date).toLocaleDateString()}
                     </td>
+                    <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                      <button
+                        onClick={() => openEdit(r)}
+                        className="text-green-700 hover:text-green-900 text-xs font-medium mr-3"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(r.id)}
+                        className="text-red-600 hover:text-red-800 text-xs font-medium"
+                      >
+                        Delete
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -253,6 +311,78 @@ export default function WastePage() {
           </div>
         )}
       </div>
+
+      {/* Edit modal */}
+      {editing && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <h3 className="text-lg font-bold text-gray-800">Edit Waste Record</h3>
+                <p className="text-sm text-gray-500">{editing.ingredient?.name}</p>
+              </div>
+              <button
+                onClick={() => setEditing(null)}
+                className="text-gray-400 hover:text-gray-600 text-xl leading-none"
+              >
+                ✕
+              </button>
+            </div>
+            <form onSubmit={handleUpdate} className="space-y-4">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Quantity</label>
+                <input
+                  className="input-field"
+                  type="number"
+                  step="any"
+                  required
+                  value={editForm.quantity}
+                  onChange={(e) => setEditForm({ ...editForm, quantity: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Reason</label>
+                <select
+                  className="input-field"
+                  value={editForm.reason}
+                  onChange={(e) => setEditForm({ ...editForm, reason: e.target.value })}
+                >
+                  {REASONS.map((r) => (
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Date</label>
+                <input
+                  className="input-field"
+                  type="date"
+                  value={editForm.date}
+                  onChange={(e) => setEditForm({ ...editForm, date: e.target.value })}
+                />
+              </div>
+              <div className="flex gap-3 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setEditing(null)}
+                  className="px-4 py-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 text-sm font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingEdit}
+                  className="btn-secondary text-sm disabled:opacity-50"
+                >
+                  {savingEdit ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </PageShell>
   );
 }
