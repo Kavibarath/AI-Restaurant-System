@@ -97,6 +97,33 @@ export const createWaste = async (req: AuthRequest, res: Response) => {
   }
 };
 
+// Update waste record
+export const updateWaste = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { quantity, reason, date } = req.body;
+
+    const updateData: any = {};
+    if (quantity !== undefined) updateData.quantity = parseFloat(quantity);
+    if (reason) updateData.reason = reason;
+    if (date) updateData.date = new Date(date);
+
+    const waste = await prisma.wasteRecord.update({
+      where: { id },
+      data: updateData,
+      include: { ingredient: true },
+    });
+
+    return res.status(200).json({
+      message: 'Waste record updated successfully',
+      waste,
+    });
+  } catch (error) {
+    console.error('Update waste error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 // Delete waste record
 export const deleteWaste = async (req: AuthRequest, res: Response) => {
   try {
