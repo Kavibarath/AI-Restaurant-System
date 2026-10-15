@@ -1,8 +1,6 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../lib/prisma';
 import { forecastDemand, recommendItems, DemandDayInput } from '../services/aiService';
-
-const prisma = new PrismaClient();
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -241,25 +239,30 @@ export const getAIRecommendations = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Menu Item ID is required' });
     }
 
-    const target = await prisma.menuItem.findUnique({ where: { id: menuItemId } });
+    const since = new Date(Date.now() - 90 * DAY_MS);
+    const branchFilter: any = branchId ? { branchId: branchId as string } : {};
+
+    // Two parallel queries: every line item of recent completed orders, and the menu
+    const [lineItems, menuItems] = await Promise.all([
+      prisma.orderItem.findMany({
+        where: { order: { ...branchFilter, status: 'completed', createdAt: { gte: since } } },
+        select: { orderId: true, menuItemId: true },
+      }),
+      prisma.menuItem.findMany({ select: { id: true, name: true, category: true } }),
+    ]);
+
+    const target = menuItems.find((m) => m.id === menuItemId);
     if (!target) {
       return res.status(404).json({ error: 'Menu item not found' });
     }
 
-    const since = new Date(Date.now() - 90 * DAY_MS);
-    const branchFilter: any = branchId ? { branchId: branchId as string } : {};
-
-    const [orders, menuItems] = await Promise.all([
-      prisma.order.findMany({
-        where: { ...branchFilter, status: 'completed', createdAt: { gte: since } },
-        select: { orderItems: { select: { menuItemId: true } } },
-      }),
-      prisma.menuItem.findMany({ select: { id: true, name: true } }),
-    ]);
-
-    const transactions = orders
-      .map((o) => Array.from(new Set(o.orderItems.map((oi) => oi.menuItemId))))
-      .filter((basket) => basket.length > 0);
+    // Group line items into baskets (one set of distinct items per order)
+    const baskets = new Map<string, Set<string>>();
+    lineItems.forEach((li) => {
+      if (!baskets.has(li.orderId)) baskets.set(li.orderId, new Set());
+      baskets.get(li.orderId)!.add(li.menuItemId);
+    });
+    const transactions = Array.from(baskets.values(), (b) => Array.from(b));
 
     const items: Record<string, string> = {};
     menuItems.forEach((m) => {
@@ -276,18 +279,21 @@ export const getAIRecommendations = async (req: Request, res: Response) => {
       });
     }
 
-    // Keep only the latest recommendation set for this item
-    await prisma.$transaction([
-      prisma.recommendation.deleteMany({ where: { menuItemId } }),
-      prisma.recommendation.createMany({
-        data: result.recommended_items.map((r) => ({
-          menuItemId,
-          recommendedItem: r.name,
-          frequency: r.frequency,
-          confidence: r.confidence,
-        })),
-      }),
-    ]);
+    // Keep only the latest recommendation set for this item. This is a history
+    // record the response doesn't depend on, so it's saved without blocking it.
+    prisma
+      .$transaction([
+        prisma.recommendation.deleteMany({ where: { menuItemId } }),
+        prisma.recommendation.createMany({
+          data: result.recommended_items.map((r) => ({
+            menuItemId,
+            recommendedItem: r.name,
+            frequency: r.frequency,
+            confidence: r.confidence,
+          })),
+        }),
+      ])
+      .catch((err) => console.error('Failed to save recommendations:', err.message));
 
     return res.status(200).json({
       success: true,

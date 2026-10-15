@@ -1,7 +1,5 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import prisma from '../lib/prisma';
 
 // Get all menu items (optionally filtered by branch / category)
 export const getMenu = async (req: Request, res: Response) => {

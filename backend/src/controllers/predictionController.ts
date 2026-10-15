@@ -3,11 +3,9 @@
  * Member B - Inventory Intelligence
  */
 import { Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../lib/prisma';
 import { AuthRequest } from '../middleware/authMiddleware';
 import { predictWaste, predictInventory } from '../services/aiService';
-
-const prisma = new PrismaClient();
 
 /**
  * Predict waste for a single inventory item

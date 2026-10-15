@@ -1,7 +1,6 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import prisma from '../lib/prisma';
 
 const WALK_IN_EMAIL = 'walk-in@restaurant.local';
 
@@ -11,7 +10,7 @@ const WALK_IN_EMAIL = 'walk-in@restaurant.local';
  * "Walk-in Customer" record when no customer details are supplied.
  */
 const resolveCustomerId = async (
-  tx: any,
+  db: PrismaClient,
   customerId?: string,
   customerName?: string,
   customerEmail?: string
@@ -19,7 +18,7 @@ const resolveCustomerId = async (
   if (customerId) return customerId;
 
   if (customerEmail) {
-    const customer = await tx.customer.upsert({
+    const customer = await db.customer.upsert({
       where: { email: customerEmail },
       update: customerName ? { name: customerName } : {},
       create: { email: customerEmail, name: customerName || customerEmail },
@@ -27,7 +26,7 @@ const resolveCustomerId = async (
     return customer.id;
   }
 
-  const walkIn = await tx.customer.upsert({
+  const walkIn = await db.customer.upsert({
     where: { email: WALK_IN_EMAIL },
     update: {},
     create: { email: WALK_IN_EMAIL, name: 'Walk-in Customer' },
@@ -44,66 +43,51 @@ export const createOrder = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Missing branchId or order items' });
     }
 
-    // Atomically fetch prices, calculate total, and write to DB
-    const newOrder = await prisma.$transaction(async (tx) => {
-      const resolvedCustomerId = await resolveCustomerId(
-        tx,
-        customerId,
-        customerName,
-        customerEmail
-      );
+    // Fetch accurate item prices directly from DB (one query) to prevent frontend tampering
+    const menuItems = await prisma.menuItem.findMany({
+      where: { id: { in: items.map((i: any) => i.menuItemId) } },
+    });
+    const priceOf = new Map(menuItems.map((m) => [m.id, m]));
 
-      let totalAmount = 0;
-      const verifiedItems = [];
+    let totalAmount = 0;
+    const verifiedItems = [];
 
-      // Fetch accurate item prices directly from DB to prevent frontend tampering
-      for (const item of items) {
-        const menuItem = await tx.menuItem.findUnique({
-          where: { id: item.menuItemId },
-        });
-
-        if (!menuItem) {
-          throw new Error(`Menu item with ID ${item.menuItemId} not found`);
-        }
-
-        const quantity = parseInt(item.quantity, 10);
-        if (!quantity || quantity < 1) {
-          throw new Error(`Invalid quantity for ${menuItem.name}`);
-        }
-
-        const itemTotal = menuItem.price * quantity;
-        totalAmount += itemTotal;
-
-        verifiedItems.push({
-          menuItemId: item.menuItemId,
-          quantity,
-          price: menuItem.price, // Snapshot of the price at checkout
-        });
+    for (const item of items) {
+      const menuItem = priceOf.get(item.menuItemId);
+      if (!menuItem) {
+        return res.status(400).json({ error: `Menu item with ID ${item.menuItemId} not found` });
       }
 
-      // 1. Create parent Order
-      const order = await tx.order.create({
-        data: {
-          customerId: resolvedCustomerId,
-          branchId,
-          totalAmount,
-          status: 'pending',
-        },
-      });
+      const quantity = parseInt(item.quantity, 10);
+      if (!quantity || quantity < 1) {
+        return res.status(400).json({ error: `Invalid quantity for ${menuItem.name}` });
+      }
 
-      // 2. Prepare and bulk-insert Order Items
-      const orderItemEntries = verifiedItems.map((item) => ({
-        orderId: order.id,
+      totalAmount += menuItem.price * quantity;
+      verifiedItems.push({
         menuItemId: item.menuItemId,
-        quantity: item.quantity,
-        price: item.price, // Added price field here to satisfy schema requirements
-      }));
-
-      await tx.orderItem.createMany({
-        data: orderItemEntries,
+        quantity,
+        price: menuItem.price, // Snapshot of the price at checkout
       });
+    }
 
-      return order;
+    const resolvedCustomerId = await resolveCustomerId(
+      prisma,
+      customerId,
+      customerName,
+      customerEmail
+    );
+
+    // Nested write: the order and all its items are inserted atomically in a
+    // single round trip (an interactive $transaction timed out over the pooler)
+    const newOrder = await prisma.order.create({
+      data: {
+        customerId: resolvedCustomerId,
+        branchId,
+        totalAmount,
+        status: 'pending',
+        orderItems: { create: verifiedItems },
+      },
     });
 
     return res.status(201).json({ success: true, data: newOrder });
@@ -123,23 +107,28 @@ export const getOrders = async (req: Request, res: Response) => {
   try {
     const { branchId, status, limit } = req.query;
 
-    const where: any = {};
-    if (branchId) where.branchId = branchId as string;
+    const branchWhere: any = {};
+    if (branchId) branchWhere.branchId = branchId as string;
+    const where: any = { ...branchWhere };
     if (status) where.status = status as string;
 
-    const orders = await prisma.order.findMany({
-      where,
-      include: ORDER_INCLUDE,
-      orderBy: { createdAt: 'desc' },
-      take: limit ? parseInt(limit as string, 10) : 100,
-    });
+    // The list is capped, so status counts come from a separate grouped query
+    // over ALL orders (independent of the status filter and the limit)
+    const [orders, statusCounts] = await Promise.all([
+      prisma.order.findMany({
+        where,
+        include: ORDER_INCLUDE,
+        orderBy: { createdAt: 'desc' },
+        take: limit ? parseInt(limit as string, 10) : 100,
+      }),
+      prisma.order.groupBy({ by: ['status'], where: branchWhere, _count: { _all: true } }),
+    ]);
 
-    const summary = {
-      total: orders.length,
-      pending: orders.filter((o) => o.status === 'pending').length,
-      completed: orders.filter((o) => o.status === 'completed').length,
-      cancelled: orders.filter((o) => o.status === 'cancelled').length,
-    };
+    const summary = { total: 0, pending: 0, completed: 0, cancelled: 0 };
+    statusCounts.forEach((s) => {
+      (summary as any)[s.status] = s._count._all;
+      summary.total += s._count._all;
+    });
 
     return res.status(200).json({ success: true, summary, data: orders });
   } catch (error: any) {
