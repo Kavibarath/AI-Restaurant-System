@@ -39,7 +39,7 @@ async def root():
         "message": "AI Restaurant Management System",
         "status": "running",
         "endpoints": {
-            "demand": "/api/predict-demand",
+            "demand": "/api/predict-demand, /api/forecast-demand",
             "recommendations": "/api/recommend-items",
             "inventory": "/api/predict-inventory",
             "waste": "/api/predict-waste"

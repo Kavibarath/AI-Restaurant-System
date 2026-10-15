@@ -1,63 +1,107 @@
+"""
+Menu Recommendation API - Member A
+Market basket analysis: Apriori-style association rules (A -> B)
+mined from real order baskets sent by the backend.
+"""
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import List
+from typing import Dict, List
+from collections import Counter
 
 router = APIRouter()
 
-# Matches your pre-defined request template exactly
-class RecommendationRequest(BaseModel):
-    order_history: List[str]  # Updated to string to match standard CUID string identifiers in your database schema
+MIN_SUPPORT = 0.01  # rule must appear in at least 1% of all baskets
+TOP_N = 3
 
-# Matches your pre-defined response template exactly
+
+class RecommendationRequest(BaseModel):
+    target_item_id: str
+    transactions: List[List[str]]  # each basket = list of menu item IDs
+    items: Dict[str, str] = {}  # menu item ID -> display name
+
+
+class RecommendedItem(BaseModel):
+    id: str
+    name: str
+    support: float  # P(A and B)
+    confidence: float  # P(B | A)
+    lift: float  # confidence / P(B); > 1 means bought together more than by chance
+    frequency: int  # number of baskets containing both A and B
+
+
 class RecommendationResponse(BaseModel):
-    recommended_items: List[dict]  # [{id, name, frequency, confidence}, ...]
+    target_item_id: str
+    recommended_items: List[RecommendedItem]
+    method: str
+
 
 @router.post("/recommend-items", response_model=RecommendationResponse)
 async def recommend_items(request: RecommendationRequest):
     """
     MEMBER A - Menu Recommendation
-    Recommends menu items based on order history context using Apriori market basket analysis logic.
+    For target item A, scores every co-purchased item B by the rule A -> B.
+    Falls back to overall best-sellers when A has no basket history.
     """
     try:
-        # Mock Association Rules Knowledge Base (Simulating Apriori training model outputs)
-        # In a fully trained state, this maps relationships based on past transactions
-        mock_apriori_rules = {
-            "burger_id": [
-                {"id": "rec_french_fries", "name": "Crispy French Fries", "frequency": 145, "confidence": 0.88},
-                {"id": "rec_coke", "name": "Coca-Cola Large", "frequency": 120, "confidence": 0.76}
-            ],
-            "pizza_id": [
-                {"id": "rec_garlic_bread", "name": "Cheesy Garlic Bread", "frequency": 98, "confidence": 0.82},
-                {"id": "rec_lava_cake", "name": "Choco Lava Cake", "frequency": 54, "confidence": 0.61}
-            ],
-            "pasta_id": [
-                {"id": "rec_garlic_bread", "name": "Cheesy Garlic Bread", "frequency": 112, "confidence": 0.85},
-                {"id": "rec_caesar_salad", "name": "Classic Caesar Salad", "frequency": 42, "confidence": 0.55}
-            ]
-        }
+        baskets = [set(b) for b in request.transactions if b]
+        total = len(baskets)
+        target = request.target_item_id
+        name_of = lambda item_id: request.items.get(item_id, item_id)
 
-        recommendations = []
+        if total == 0:
+            return RecommendationResponse(
+                target_item_id=target, recommended_items=[], method="no-data"
+            )
 
-        # Scan items inside incoming order history request to find associated cross-sell items
-        for item_id in request.order_history:
-            # Check if we have defined any market basket rules for this item
-            if item_id in mock_apriori_rules:
-                for rule in mock_apriori_rules[item_id]:
-                    # Prevent recommending an item that is already listed in their order history array
-                    if rule["id"] not in request.order_history and rule not in recommendations:
-                        recommendations.append(rule)
+        # Frequent 1-itemsets (support counts)
+        item_counts = Counter(item for basket in baskets for item in basket)
+        target_baskets = [b for b in baskets if target in b]
 
-        # Fallback logic: If no specific association matches are found, return generic restaurant best-sellers
-        if not recommendations:
-            recommendations = [
-                {"id": "rec_garlic_bread", "name": "Cheesy Garlic Bread", "frequency": 210, "confidence": 0.70},
-                {"id": "rec_french_fries", "name": "Crispy French Fries", "frequency": 195, "confidence": 0.65}
-            ]
+        rules = []
+        if target_baskets:
+            pair_counts = Counter(
+                other for basket in target_baskets for other in basket if other != target
+            )
+            for other, both in pair_counts.items():
+                support = both / total
+                if support < MIN_SUPPORT:
+                    continue
+                confidence = both / len(target_baskets)
+                lift = confidence / (item_counts[other] / total)
+                rules.append(RecommendedItem(
+                    id=other,
+                    name=name_of(other),
+                    support=round(support, 4),
+                    confidence=round(confidence, 4),
+                    lift=round(lift, 2),
+                    frequency=both,
+                ))
 
-        # Sort recommendations by highest algorithm confidence score and return
-        recommendations = sorted(recommendations, key=lambda x: x["confidence"], reverse=True)
+        if rules:
+            # Rank by confidence, break ties with lift
+            rules.sort(key=lambda r: (r.confidence, r.lift), reverse=True)
+            return RecommendationResponse(
+                target_item_id=target,
+                recommended_items=rules[:TOP_N],
+                method="association-rules",
+            )
 
-        return RecommendationResponse(recommended_items=recommendations[:3])
+        # Fallback: most popular items overall (excluding the target)
+        popular = [
+            RecommendedItem(
+                id=item_id,
+                name=name_of(item_id),
+                support=round(count / total, 4),
+                confidence=round(count / total, 4),
+                lift=1.0,
+                frequency=count,
+            )
+            for item_id, count in item_counts.most_common()
+            if item_id != target
+        ][:TOP_N]
 
+        return RecommendationResponse(
+            target_item_id=target, recommended_items=popular, method="popularity-fallback"
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
