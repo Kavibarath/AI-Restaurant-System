@@ -5,13 +5,35 @@ import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { getCurrentUser, logout, isAuthenticated } from '@/services/authService';
 
-const NAV = [
-  { href: '/dashboard', label: 'Home', icon: '🏠' },
-  { href: '/dashboard/inventory', label: 'Inventory', icon: '📦' },
-  { href: '/dashboard/ingredients', label: 'Ingredients', icon: '🥕' },
-  { href: '/dashboard/suppliers', label: 'Suppliers', icon: '🚚' },
-  { href: '/dashboard/waste', label: 'Waste AI', icon: '🗑️' },
-  { href: '/dashboard/inventory-forecast', label: 'Forecast', icon: '📊' },
+// Sidebar sections; active colour matches each module's card on the main dashboard
+const NAV_SECTIONS = [
+  {
+    title: null,
+    active: 'bg-gray-200 text-gray-900',
+    items: [{ href: '/dashboard', label: 'Home', icon: '🏠' }],
+  },
+  {
+    title: 'Sales Intelligence',
+    active: 'bg-red-100 text-red-800',
+    items: [
+      { href: '/dashboard/menu', label: 'Menu', icon: '📋' },
+      { href: '/dashboard/orders', label: 'Orders', icon: '🛒' },
+      { href: '/dashboard/sales', label: 'Sales', icon: '💰' },
+      { href: '/dashboard/demand-forecast', label: 'Demand AI', icon: '📈' },
+      { href: '/dashboard/recommendations', label: 'Recommendations', icon: '⭐' },
+    ],
+  },
+  {
+    title: 'Inventory Intelligence',
+    active: 'bg-green-100 text-green-800',
+    items: [
+      { href: '/dashboard/inventory', label: 'Inventory', icon: '📦' },
+      { href: '/dashboard/ingredients', label: 'Ingredients', icon: '🥕' },
+      { href: '/dashboard/suppliers', label: 'Suppliers', icon: '🚚' },
+      { href: '/dashboard/waste', label: 'Waste AI', icon: '🗑️' },
+      { href: '/dashboard/inventory-forecast', label: 'Forecast', icon: '📊' },
+    ],
+  },
 ];
 
 interface PageShellProps {
@@ -21,7 +43,7 @@ interface PageShellProps {
 }
 
 /**
- * Shared authenticated shell for all Inventory-module pages.
+ * Shared authenticated shell for all Sales & Inventory module pages.
  * Handles auth-guard, top nav, sidebar and logout.
  */
 export default function PageShell({ title, subtitle, children }: PageShellProps) {
@@ -55,27 +77,34 @@ export default function PageShell({ title, subtitle, children }: PageShellProps)
       {/* Sidebar */}
       <aside className="w-60 bg-white shadow-md hidden md:flex flex-col">
         <div className="px-6 py-5 border-b">
-          <h2 className="text-lg font-bold text-green-700">📦 Inventory AI</h2>
-          <p className="text-xs text-gray-400 mt-1">Member B Module</p>
+          <h2 className="text-lg font-bold text-red-700">🍽️ AI Restaurant</h2>
+          <p className="text-xs text-gray-400 mt-1">Smart Management System</p>
         </div>
-        <nav className="flex-1 px-3 py-4 space-y-1">
-          {NAV.map((item) => {
-            const active = pathname === item.href;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  active
-                    ? 'bg-green-100 text-green-800'
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                <span>{item.icon}</span>
-                {item.label}
-              </Link>
-            );
-          })}
+        <nav className="flex-1 px-3 py-4 space-y-4 overflow-y-auto">
+          {NAV_SECTIONS.map((section) => (
+            <div key={section.title ?? 'home'} className="space-y-1">
+              {section.title && (
+                <p className="px-3 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  {section.title}
+                </p>
+              )}
+              {section.items.map((item) => {
+                const active = pathname === item.href;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      active ? section.active : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <span>{item.icon}</span>
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
         </nav>
       </aside>
 
