@@ -41,8 +41,8 @@ export default function OrdersPage() {
       setLoading(true);
       const res = await getOrders(status);
       setOrders(res.data);
-      // Status counts always reflect all orders, independent of the active tab
-      setSummary(status ? (await getOrders()).summary : res.summary);
+      // Counts cover all orders, independent of the active tab
+      setSummary(res.summary);
       setError('');
     } catch (e: any) {
       setError(e.response?.data?.error || 'Failed to load orders');
