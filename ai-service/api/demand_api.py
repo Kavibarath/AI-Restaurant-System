@@ -18,8 +18,12 @@ MODELS_DIR = os.path.join(os.path.dirname(__file__), '..', 'models')
 
 try:
     bundle = joblib.load(os.path.join(MODELS_DIR, 'demand_model.pkl'))
-    demand_model = bundle['model']
+    # Both models predict a multiplier of the past 7-day average
+    orders_model = bundle['orders_model']
+    sales_model = bundle['sales_model']
     FEATURES = bundle['features']
+    # Typical relative error measured on held-out days during training
+    BASE_ERROR = bundle.get('orders_mape', 0.1)
     MODEL_LOADED = True
     print("[OK] Demand forecasting model loaded successfully")
 except Exception as e:
@@ -73,25 +77,26 @@ class ForecastResponse(BaseModel):
 
 def _predict(day_of_week: int, month: int, is_holiday: bool,
              avg_orders: float, avg_sales: float):
-    """Run the model for one day; confidence comes from agreement between trees."""
+    """
+    Run the models for one day: predicted multiplier x recent daily average.
+    Confidence = 1 - (validation error + disagreement between the trees),
+    so unusual days (e.g. holidays, seen less in training) score lower.
+    """
     features = pd.DataFrame([[
         day_of_week,
         month,
         1 if day_of_week >= 5 else 0,
         1 if is_holiday else 0,
-        avg_orders,
-        avg_sales,
     ]], columns=FEATURES)
 
-    orders, sales = demand_model.predict(features)[0]
+    orders = orders_model.predict(features)[0] * avg_orders
+    sales = sales_model.predict(features)[0] * avg_sales
 
     # Spread of individual tree predictions -> how certain the forest is
     # (individual trees were fitted on raw arrays, so pass .values)
-    tree_orders = np.array(
-        [tree.predict(features.values)[0][0] for tree in demand_model.estimators_]
-    )
-    spread = tree_orders.std() / max(tree_orders.mean(), 1.0)
-    confidence = float(np.clip(1.0 - spread, 0.5, 0.99))
+    tree_mult = np.array([tree.predict(features.values)[0] for tree in orders_model.estimators_])
+    spread = tree_mult.std() / max(tree_mult.mean(), 0.01)
+    confidence = float(np.clip(1.0 - BASE_ERROR - spread, 0.5, 0.99))
 
     return max(0, int(round(orders))), round(max(0.0, float(sales)), 2), round(confidence, 2)
 
@@ -148,6 +153,6 @@ async def forecast_demand(request: ForecastRequest):
             order_window = order_window[1:] + [orders]
             sales_window = sales_window[1:] + [sales]
 
-        return ForecastResponse(forecast=results, model="RandomForestRegressor")
+        return ForecastResponse(forecast=results, model="RandomForestRegressor (demand multiplier)")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

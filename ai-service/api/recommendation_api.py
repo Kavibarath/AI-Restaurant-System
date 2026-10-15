@@ -11,6 +11,7 @@ from collections import Counter
 router = APIRouter()
 
 MIN_SUPPORT = 0.01  # rule must appear in at least 1% of all baskets
+MIN_LIFT = 1.0  # only pairs bought together MORE often than chance
 TOP_N = 3
 
 
@@ -68,6 +69,8 @@ async def recommend_items(request: RecommendationRequest):
                     continue
                 confidence = both / len(target_baskets)
                 lift = confidence / (item_counts[other] / total)
+                if lift <= MIN_LIFT:
+                    continue
                 rules.append(RecommendedItem(
                     id=other,
                     name=name_of(other),
