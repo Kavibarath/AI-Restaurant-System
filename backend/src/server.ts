@@ -4,6 +4,8 @@ import dotenv from 'dotenv';
 
 // Auth routes (shared)
 import authRoutes from './routes/authRoutes';
+
+// Member A: Sales Module routes
 import menuRoutes from './routes/menuRoutes';
 import orderRoutes from './routes/orderRoutes';
 import salesRoutes from './routes/salesRoutes';
@@ -28,6 +30,8 @@ app.use(cors());
 
 // ============= SHARED ROUTES =============
 app.use('/api/auth', authRoutes);
+
+// ============= MEMBER A: SALES MODULE =============
 app.use('/api/menu', menuRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/sales', salesRoutes);
@@ -53,6 +57,9 @@ app.get('/', (req, res) => {
     version: '1.0.0',
     endpoints: {
       auth: '/api/auth/register, /api/auth/login, /api/auth/me',
+      menu: '/api/menu',
+      orders: '/api/orders, /api/orders/:id/status',
+      sales: '/api/sales/analytics, /api/sales/forecast/:branchId, /api/sales/recommendations/:menuItemId',
       ingredients: '/api/ingredients',
       inventory: '/api/inventory',
       suppliers: '/api/suppliers',
@@ -71,5 +78,6 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
+  console.log(`📊 Sales APIs ready at /api/menu, /api/orders, /api/sales`);
   console.log(`📦 Inventory APIs ready at /api/ingredients, /api/inventory, /api/suppliers, /api/waste`);
 });

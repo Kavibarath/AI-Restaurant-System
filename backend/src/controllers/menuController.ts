@@ -3,10 +3,20 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-// Get all menu items
+// Get all menu items (optionally filtered by branch / category)
 export const getMenu = async (req: Request, res: Response) => {
   try {
-    const menuItems = await prisma.menuItem.findMany();
+    const { branchId, category } = req.query;
+
+    const where: any = {};
+    if (branchId) where.branchId = branchId as string;
+    if (category) where.category = category as string;
+
+    const menuItems = await prisma.menuItem.findMany({
+      where,
+      include: { _count: { select: { orderItems: true } } },
+      orderBy: [{ category: 'asc' }, { name: 'asc' }],
+    });
     return res.status(200).json({ success: true, data: menuItems });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
@@ -77,6 +87,12 @@ export const deleteMenuItem = async (req: Request, res: Response) => {
     await prisma.menuItem.delete({ where: { id } });
     return res.status(200).json({ success: true, message: 'Item deleted successfully' });
   } catch (error: any) {
+    // P2003 = foreign key violation (item already used by orders / recommendations)
+    if (error.code === 'P2003') {
+      return res
+        .status(409)
+        .json({ error: 'Cannot delete: this item is linked to existing orders' });
+    }
     return res.status(500).json({ error: error.message });
   }
 };

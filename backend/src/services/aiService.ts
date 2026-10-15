@@ -71,6 +71,68 @@ export const predictInventory = async (
   return response.data;
 };
 
+// ============= DEMAND FORECASTING (Member A) =============
+export interface DemandDayInput {
+  date: string; // YYYY-MM-DD
+  day_of_week: number; // 0 = Monday ... 6 = Sunday
+  month: number; // 1-12
+  is_holiday: boolean;
+}
+
+export interface DemandForecastInput {
+  days: DemandDayInput[];
+  past_7day_avg_orders: number;
+  past_7day_avg_sales: number;
+}
+
+export interface DemandDayResult {
+  date: string;
+  predicted_orders: number;
+  predicted_sales: number;
+  confidence: number;
+}
+
+export interface DemandForecastResult {
+  forecast: DemandDayResult[];
+  model: string;
+}
+
+export const forecastDemand = async (
+  input: DemandForecastInput
+): Promise<DemandForecastResult> => {
+  const response = await aiClient.post('/api/forecast-demand', input);
+  return response.data;
+};
+
+// ============= MENU RECOMMENDATIONS (Member A) =============
+export interface RecommendationInput {
+  target_item_id: string;
+  transactions: string[][]; // each basket = list of menu item IDs
+  items: Record<string, string>; // menu item ID -> name
+}
+
+export interface RecommendedItem {
+  id: string;
+  name: string;
+  support: number;
+  confidence: number;
+  lift: number;
+  frequency: number;
+}
+
+export interface RecommendationResult {
+  target_item_id: string;
+  recommended_items: RecommendedItem[];
+  method: string;
+}
+
+export const recommendItems = async (
+  input: RecommendationInput
+): Promise<RecommendationResult> => {
+  const response = await aiClient.post('/api/recommend-items', input);
+  return response.data;
+};
+
 // ============= HEALTH CHECK =============
 export const checkAIServiceHealth = async (): Promise<boolean> => {
   try {
